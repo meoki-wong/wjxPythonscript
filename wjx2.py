@@ -47,23 +47,53 @@ from slider_handler import handle_slider_question
 
 def zanip():
     """
-    获取代理IP地址，确保每个问卷使用新的IP
+    获取代理IP地址列表，确保每个问卷使用新的IP
+    一次获取4个IP
     """
     try:
         # https://dps.kdlapi.com/api/getdps/?secret_id=osm4dnzrxkig3ynnhx5t&signature=hxl6r46zjtv62y0j1qzya13qt8k8ralp&num=1&format=text&sep=1
         # 这里放你的ip链接，选择你想要的地区，1分钟，ip池无所谓，数据格式txt，提取数量1，数量一定是1!其余默认即可
         # api = "http://www.zdopen.com/ShortProxy/GetIP/?api=202512191601503767&akey=f487701178ceb620&count=1&timespan=0&type=1"
         # api = "https://dps.kdlapi.com/api/getdps/?secret_id=osm4dnzrxkig3ynnhx5t&signature=hxl6r46zjtv62y0j1qzya13qt8k8ralp&num=1&format=text&sep=1"
-        api = "http://www.zdopen.com/FreeProxy/Get/?app_id=202601231529549004&akey=6d21c08f3111d14b&count=1&protocol_type=1&return_type=3"
+        api = "http://www.zdopen.com/ShortProxy/GetIP/?api=202512191601503767&akey=f487701178ceb620&count=4&timespan=0&type=1"
         response = requests.get(api, timeout=10)
         response.raise_for_status()
-        ip = response.text.strip()
+        ip_text = response.text.strip()
         
-        if validate(ip):
-            print(f"[IP] 成功获取新IP: {ip}")
-            return ip
+        # 尝试解析JSON格式
+        try:
+            import json
+            result = json.loads(ip_text)
+            if "code" in result and result["code"] == "12002":
+                print(f"[IP] 接口返回错误: {result.get('msg', '未知错误')}")
+                return None
+            elif "data" in result:
+                # 如果返回的是JSON格式，提取data字段
+                ip_text = result["data"]
+            else:
+                print(f"[IP] 未知的JSON响应格式: {ip_text}")
+                return None
+        except json.JSONDecodeError:
+            # 不是JSON格式，继续使用原来的逻辑
+            pass
+        
+        # 解析返回的IP列表（每行一个IP）
+        ip_list = [ip.strip() for ip in ip_text.split('\n') if ip.strip()]
+        
+        # 验证每个IP
+        valid_ips = []
+        for ip in ip_list:
+            if validate(ip):
+                valid_ips.append(ip)
+                print(f"[IP] 成功获取IP: {ip}")
+            else:
+                print(f"[IP] 获取的IP格式无效: {ip}")
+        
+        if valid_ips:
+            print(f"[IP] 成功获取{len(valid_ips)}个有效IP")
+            return valid_ips
         else:
-            print(f"[IP] 获取的IP格式无效: {ip}")
+            print(f"[IP] 未获取到有效IP")
             return None
             
     except requests.exceptions.RequestException as e:
@@ -72,31 +102,6 @@ def zanip():
     except Exception as e:
         print(f"[IP] 获取IP时发生异常: {str(e)}")
         return None
-
-
-def get_new_ip_with_retry(max_retries=3, thread_id=0):
-    """
-    带重试机制的IP获取函数，增加调用间隔避免频率限制
-    在多线程环境中，每个线程应该错开获取IP的时间
-    """
-    # 线程延迟，避免同时请求
-    thread_delay = thread_id * 2  # 每个线程错开2秒
-    if thread_delay > 0:
-        print(f"[IP] 线程{thread_id}等待{thread_delay}秒后开始获取IP...")
-        time.sleep(thread_delay)
-    
-    for i in range(max_retries):
-        print(f"[IP][线程{thread_id}] 第{i+1}次尝试获取IP...")
-        ip = zanip()
-        if ip and validate(ip):
-            return ip
-        # 失败后等待更长时间，避免频率限制
-        wait_time = 10 if i == 0 else 15  # 第一次失败等10秒，后续等15秒
-        print(f"[IP][线程{thread_id}] 等待{wait_time}秒后重试...")
-        time.sleep(wait_time)
-    
-    print(f"[IP][线程{thread_id}] 多次尝试后仍无法获取有效IP")
-    return None
 
 
 # 示例问卷,试运行结束后,需要改成你的问卷地址
@@ -988,176 +993,182 @@ def submit(driver: WebDriver):
         pass
 
 
-def run(xx, yy, thread_id=0):
+def run(xx, yy, thread_id=0, ip=None):
     """
-    运行问卷填写的主函数
+    运行问卷填写的主函数（执行一次后返回）
     
     Args:
         xx, yy: 浏览器窗口位置坐标
         thread_id: 线程ID，用于IP获取的错开处理
-    """
-    option = webdriver.ChromeOptions()
-    option.add_experimental_option("excludeSwitches", ["enable-automation"])
-    option.add_experimental_option("useAutomationExtension", False)
-    global cur_num, cur_fail
-    driver = None  # 初始化driver变量
+        ip: 代理IP地址（由主函数传入）
     
-    while cur_num < target_num:
-        if driver is None:  # 只有在需要新浏览器时才创建˜
-            # 每次创建新浏览器时都获取新的IP地址，确保每个问卷使用独立IP
-            if use_ip:
-                ip = get_new_ip_with_retry(thread_id=thread_id)
-                if ip:
-                    print(f"[IP][线程{thread_id}] 获取新IP地址: {ip}")
-                    # 创建新的ChromeOptions实例，避免IP累积
-                    option = webdriver.ChromeOptions()
-                    option.add_experimental_option("excludeSwitches", ["enable-automation"])
-                    option.add_experimental_option("useAutomationExtension", False)
-                    option.add_argument(f"--proxy-server={ip}")
-                else:
-                    print(f"[IP][线程{thread_id}] 无法获取新IP，使用本机IP继续执行")
-                    # 创建不带代理的ChromeOptions
-                    option = webdriver.ChromeOptions()
-                    option.add_experimental_option("excludeSwitches", ["enable-automation"])
-                    option.add_experimental_option("useAutomationExtension", False)
-            else:
-                # 创建不带代理的ChromeOptions
-                option = webdriver.ChromeOptions()
-                option.add_experimental_option("excludeSwitches", ["enable-automation"])
-                option.add_experimental_option("useAutomationExtension", False)
-            driver = webdriver.Chrome(options=option)
-            driver.set_window_size(1200, 800)  # 增大窗口便于调试
-            driver.set_window_position(x=xx, y=yy)
-            # 有学过 vue2 的吗, Object.defineProperty 这个 api 是不是很眼熟啊哈哈哈
-            driver.execute_cdp_cmd(
-                "Page.addScriptToEvaluateOnNewDocument",
-                {
-                    "source": 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
-                },
-            )
-        
+    Returns:
+        bool: 成功返回True，失败返回False
+    """
+    global cur_num, cur_fail
+    
+    # 先测试代理IP是否可用
+    if ip:
+        print(f"[IP][线程{thread_id}] 测试代理IP连接: {ip}")
         try:
-            print(f"\n[调试] 正在打开问卷页面: {url}")
-            driver.get(url)
-            print(f"[调试] 页面标题: {driver.title}")
-            print(f"[调试] 当前URL: {driver.current_url}")
-            
-            # 等待页面加载
-            time.sleep(3)
-            
-            url1 = driver.current_url  # 表示问卷链接
-            print(f"[调试] 开始填写问卷，初始URL: {url1}")
-            
-            brush(driver)
-            
-            # 刷完后给一定时间让页面跳转
-            time.sleep(4)
-            url2 = driver.current_url
-            print(f"[调试] 填写完成后的URL: {url2}")
-            
-            if url1 != url2:
-                cur_num += 1
-                print(
-                    f"✅ 成功填写第{cur_num}份 - 失败{cur_fail}次 - {time.strftime('%H:%M:%S', time.localtime(time.time()))} "
-                )
-                print("[调试] 问卷填写成功！正在关闭当前浏览器...")
-                # 成功填写后也关闭浏览器，准备下一次
-                try:
-                    driver.quit()
-                    print("✅ 成功关闭浏览器")
-                except Exception as quit_error:
-                    print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
-                driver = None  # 重置driver变量
-                
-                # 等待1秒让系统释放资源
-                time.sleep(1)
-                print("🔄 准备进行下一次问卷填写...")
-            else:
-                print("[调试] URL未变化，可能填写失败。正在关闭当前浏览器并重新尝试...")
-                # URL未变化也视为失败，关闭浏览器重新尝试
-                try:
-                    driver.quit()
-                    print("✅ 成功关闭浏览器")
-                except Exception as quit_error:
-                    print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
-                driver = None
-                
-                # 增加失败计数
-                lock.acquire()
-                cur_fail += 1
-                lock.release()
-                
-                print(f"⚠️ URL未变化，视为失败。已失败{cur_fail}次")
-                
-                # 等待2秒让系统释放资源
-                time.sleep(2)
-                
-                if cur_fail >= fail_threshold:
-                    logging.critical(f"失败次数过多({cur_fail}次)，程序将停止。")
-                    print("\n❌ 达到失败阈值，程序停止")
-                    break
-                else:
-                    print(f"\n🔄 准备进行第{cur_fail + 1}次尝试...")
-                    continue
-                    
-        except KeyboardInterrupt:
-            print("\n[用户中断] 用户手动停止脚本")
-            if driver:
-                print("[提示] 浏览器保持打开状态，您可以检查页面")
-            break
-            
+            test_response = requests.get("http://www.baidu.com", proxies={"http": f"http://{ip}", "https": f"http://{ip}"}, timeout=5)
+            print(f"[IP][线程{thread_id}] 代理IP测试成功，状态码: {test_response.status_code}")
         except Exception as e:
-            print(f"\n❌ [错误] 发生异常: {str(e)}")
-            traceback.print_exc()
-            
-            # 获取页面信息用于调试
+            print(f"[IP][线程{thread_id}] 代理IP测试失败: {str(e)}")
+            return False
+    
+    # 创建浏览器
+    driver = None
+    try:
+        if ip:
+            print(f"[IP][线程{thread_id}] 使用代理IP: {ip}")
+            option = webdriver.ChromeOptions()
+            option.add_experimental_option("excludeSwitches", ["enable-automation"])
+            option.add_experimental_option("useAutomationExtension", False)
+            option.add_argument(f"--proxy-server={ip}")
+            option.add_argument("--no-sandbox")
+            option.add_argument("--disable-dev-shm-usage")
+            option.add_argument("--disable-gpu")
+            option.add_argument("--disable-software-rasterizer")
+            option.add_argument("--disable-extensions")
+            option.add_argument("--disable-infobars")
+            option.add_argument("--disable-notifications")
+            option.add_argument("--start-maximized")
+            option.add_argument("--disable-blink-features=AutomationControlled")
+            option.add_argument("--disable-web-security")
+            option.add_argument("--allow-running-insecure-content")
+            option.add_argument("--ignore-certificate-errors")
+            option.add_argument("--ignore-ssl-errors")
+            option.add_argument("--log-level=3")
+            option.add_argument("--disable-logging")
+            driver = webdriver.Chrome(options=option)
+            print(f"[IP][线程{thread_id}] 代理IP连接成功")
+        else:
+            print(f"[IP][线程{thread_id}] 使用本机IP")
+            option = webdriver.ChromeOptions()
+            option.add_experimental_option("excludeSwitches", ["enable-automation"])
+            option.add_experimental_option("useAutomationExtension", False)
+            option.add_argument("--no-sandbox")
+            option.add_argument("--disable-dev-shm-usage")
+            option.add_argument("--disable-gpu")
+            option.add_argument("--disable-software-rasterizer")
+            option.add_argument("--disable-extensions")
+            option.add_argument("--disable-infobars")
+            option.add_argument("--disable-notifications")
+            option.add_argument("--start-maximized")
+            option.add_argument("--disable-blink-features=AutomationControlled")
+            driver = webdriver.Chrome(options=option)
+        
+        driver.set_window_size(1200, 800)  # 增大窗口便于调试
+        driver.set_window_position(x=xx, y=yy)
+        # 有学过 vue2 的吗, Object.defineProperty 这个 api 是不是很眼熟啊哈哈哈
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
+            },
+        )
+    except Exception as e:
+        print(f"[IP][线程{thread_id}] 创建浏览器失败: {str(e)}")
+        if driver:
             try:
-                print(f"[调试] 异常发生时页面标题: {driver.title}")
-                print(f"[调试] 异常发生时URL: {driver.current_url}")
-                # 尝试获取页面源码的一部分
-                page_source = driver.page_source[:500]  # 获取前500字符
-                print(f"[调试] 页面源码前500字符:\n{page_source}...")
+                driver.quit()
             except:
                 pass
+        return False
+    
+    try:
+        print(f"\n[调试] 正在打开问卷页面: {url}")
+        driver.get(url)
+        print(f"[调试] 页面标题: {driver.title}")
+        print(f"[调试] 当前URL: {driver.current_url}")
+        
+        # 等待页面加载
+        time.sleep(3)
+        
+        url1 = driver.current_url  # 表示问卷链接
+        print(f"[调试] 开始填写问卷，初始URL: {url1}")
+        
+        brush(driver)
+        
+        # 刷完后给一定时间让页面跳转
+        time.sleep(4)
+        url2 = driver.current_url
+        print(f"[调试] 填写完成后的URL: {url2}")
+        
+        if url1 != url2:
+            cur_num += 1
+            print(
+                f"✅ 成功填写第{cur_num}份 - 失败{cur_fail}次 - {time.strftime('%H:%M:%S', time.localtime(time.time()))} "
+            )
+            print("[调试] 问卷填写成功！正在关闭当前浏览器...")
+            # 成功填写后也关闭浏览器，准备下一次
+            try:
+                driver.quit()
+                print("✅ 成功关闭浏览器")
+            except Exception as quit_error:
+                print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
+            return True
+        else:
+            print("[调试] URL未变化，可能填写失败。正在关闭当前浏览器...")
+            # URL未变化也视为失败，关闭浏览器
+            try:
+                driver.quit()
+                print("✅ 成功关闭浏览器")
+            except Exception as quit_error:
+                print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
             
+            # 增加失败计数
             lock.acquire()
             cur_fail += 1
             lock.release()
             
-            print(
-                f"\n⚠️ 已失败{cur_fail}次, 失败超过{int(fail_threshold)}次将强制停止",
-            )
+            print(f"⚠️ URL未变化，视为失败。已失败{cur_fail}次")
+            return False
             
-            # 无论是否达到失败阈值，都关闭当前浏览器并重新打开
-            print(f"\n� 关闭当前浏览器窗口，准备重新打开新的浏览器...")
-            if driver:
-                try:
-                    driver.quit()
-                    print("✅ 成功关闭当前浏览器")
-                except Exception as quit_error:
-                    print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
-                driver = None
+    except KeyboardInterrupt:
+        print("\n[用户中断] 用户手动停止脚本")
+        if driver:
+            print("[提示] 浏览器保持打开状态，您可以检查页面")
+        return False
             
-            # 等待2秒让系统释放资源
-            time.sleep(2)
-            
-            if cur_fail >= fail_threshold:
-                logging.critical(
-                    f"失败次数过多({cur_fail}次)，程序将停止。"
-                )
-                print("\n❌ 达到失败阈值，程序停止")
-                break
-            else:
-                print(f"\n🔄 准备进行第{cur_fail + 1}次尝试...")
-                print("[提示] 将在2秒后自动重新打开浏览器")
-                time.sleep(2)
-                continue
+    except Exception as e:
+        print(f"\n❌ [错误] 发生异常: {str(e)}")
+        traceback.print_exc()
+        
+        # 获取页面信息用于调试
+        try:
+            print(f"[调试] 异常发生时页面标题: {driver.title}")
+            print(f"[调试] 异常发生时URL: {driver.current_url}")
+            # 尝试获取页面源码的一部分
+            page_source = driver.page_source[:500]  # 获取前500字符
+            print(f"[调试] 页面源码前500字符:\n{page_source}...")
+        except:
+            pass
+        
+        lock.acquire()
+        cur_fail += 1
+        lock.release()
+        
+        print(
+            f"\n⚠️ 已失败{cur_fail}次, 失败超过{int(fail_threshold)}次将强制停止",
+        )
+        
+        # 关闭当前浏览器窗口
+        if driver:
+            try:
+                driver.quit()
+                print("✅ 成功关闭当前浏览器")
+            except Exception as quit_error:
+                print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
+        
+        return False
 
 
 # 多线程执行run函数
 if __name__ == "__main__":
     # 一个可以代刷问卷星的网站： http://sugarblack.top
-    target_num = 1  # 目标份数
+    target_num = 2000  # 目标份数
     # 失败阈值，数值可自行修改为固定整数
     fail_threshold = target_num / 4 + 1
     cur_num = 0  # 已提交份数
@@ -1166,32 +1177,86 @@ if __name__ == "__main__":
     use_ip = False
     stop = False
     
-    # 测试IP获取功能（单线程测试，避免频率限制）
+    # 测试IP获取功能
     print("[IP] 正在测试IP获取功能...")
-    test_ip = get_new_ip_with_retry(thread_id=0)
-    if test_ip:
-        print(f"[IP] IP设置成功, 将使用代理IP填写问卷 - 每个问卷使用独立IP")
-        use_ip = True
-    else:
-        print("[IP] IP设置失败, 将使用本机IP填写问卷")
+    test_ip_list = None
+    max_retries = 3
+    for retry in range(max_retries):
+        test_ip_list = zanip()
+        if test_ip_list and len(test_ip_list) >= 4:
+            print(f"[IP] IP设置成功, 将使用代理IP填写问卷 - 每个问卷使用独立IP")
+            use_ip = True
+            break
+        else:
+            print(f"[IP] 第{retry + 1}次测试失败，等待15秒后重试...")
+            if retry < max_retries - 1:
+                time.sleep(15)
     
-    # 等待10秒，让IP服务商的频率限制重置
-    print("[IP] 等待10秒让IP服务商频率限制重置...")
-    time.sleep(10)
+    if not (test_ip_list and len(test_ip_list) >= 4):
+        print(f"[IP] IP设置失败或不足4个, 程序退出")
+        exit(1)
     
-    num_threads = 4  # 窗口数量
-    threads: list[Thread] = []
-    # 创建并启动线程
-    for i in range(num_threads):
-        x = 50 + i * 60  # 浏览器弹窗左上角的横坐标
-        y = 50  # 纵坐标
-        thread = Thread(target=run, args=(x, y, i))  # 传入线程ID
-        threads.append(thread)
-        thread.start()
-
-    # 等待所有线程完成
-    for thread in threads:
-        thread.join()
+    # 主循环：不断获取IP并执行问卷，直到达到目标份数
+    print(f"[主循环] 开始主循环，cur_num={cur_num}, target_num={target_num}, cur_fail={cur_fail}, fail_threshold={fail_threshold}")
+    print(f"[主循环] 循环条件检查: {cur_num} < {target_num} = {cur_num < target_num}, {cur_fail} < {fail_threshold} = {cur_fail < fail_threshold}")
+    
+    # 使用第一次测试获取的IP作为第一批
+    ip_list = test_ip_list
+    first_batch = True  # 标记是否是第一批
+    
+    while cur_num < target_num and cur_fail < fail_threshold:
+        print(f"\n{'='*60}")
+        print(f"[主循环] 当前进度: 已完成{cur_num}份, 失败{cur_fail}次, 目标{target_num}份")
+        print(f"{'='*60}\n")
+        
+        # 获取4个IP（第一次使用测试获取的IP，后续每次重新获取）
+        if first_batch:
+            print(f"[主循环] 使用测试获取的{len(ip_list)}个IP")
+            first_batch = False
+        else:
+            print("[IP] 正在获取4个代理IP...")
+            ip_list = zanip()
+            if ip_list is None or len(ip_list) < 4:
+                print(f"[IP] 获取IP失败或不足4个，程序退出")
+                break
+            elif len(ip_list) > 4:
+                ip_list = ip_list[:4]  # 只取前4个IP
+        
+        print(f"[主循环] 成功获取{len(ip_list)}个IP，准备启动{len(ip_list)}个线程")
+        
+        # 创建并启动4个线程
+        num_threads = 4
+        threads: list[Thread] = []
+        for i in range(num_threads):
+            x = 50 + i * 60  # 浏览器弹窗左上角的横坐标
+            y = 50  # 纵坐标
+            ip = ip_list[i]
+            print(f"[主循环] 启动线程{i}，使用IP: {ip}")
+            thread = Thread(target=run, args=(x, y, i, ip))  # 传入线程ID和IP
+            threads.append(thread)
+            thread.start()
+        
+        print(f"[主循环] 所有线程已启动，等待线程完成...")
+        
+        # 等待所有线程完成
+        for i, thread in enumerate(threads):
+            print(f"[主循环] 等待线程{i}完成...")
+            thread.join()
+            print(f"[主循环] 线程{i}已完成")
+        
+        print(f"\n[主循环] 本批次完成，当前进度: 已完成{cur_num}份, 失败{cur_fail}次")
+        
+        # 等待一段时间再进行下一批
+        if cur_num < target_num and cur_fail < fail_threshold:
+            print("[主循环] 等待15秒后进行下一批（接口频率限制）...")
+            time.sleep(15)
+        else:
+            print(f"[主循环] 循环条件不满足，退出循环。cur_num={cur_num}, target_num={target_num}, cur_fail={cur_fail}, fail_threshold={fail_threshold}")
+    
+    print(f"\n{'='*60}")
+    print(f"[完成] 程序执行完毕！")
+    print(f"最终结果: 成功{cur_num}份, 失败{cur_fail}次")
+    print(f"{'='*60}")
 
 """
     总结,你需要修改的有: 1 每个题的比例参数(必改)  2 问卷链接(必改)  3 ip链接(可选)  4 浏览器窗口数量(可选)

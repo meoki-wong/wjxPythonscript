@@ -27,10 +27,6 @@ jobs:
     - name: Build with PyInstaller
       run: pyinstaller --clean wjx2.spec
     
-    - name: Rename executable
-      run: |
-        ren "dist/问卷星自动填写工具.exe" "wjx-auto-fill.exe"
-    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
