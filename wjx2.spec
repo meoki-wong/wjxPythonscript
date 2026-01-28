@@ -37,7 +37,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='问卷星自动填写工具',
+    name='wjx-auto-fill',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
