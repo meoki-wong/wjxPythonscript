@@ -46,10 +46,57 @@ from slider_handler import handle_slider_question
 
 
 def zanip():
-    # 这里放你的ip链接，选择你想要的地区，1分钟，ip池无所谓，数据格式txt，提取数量1，数量一定是1!其余默认即可
-    api = "https://service.ipzan.com/core-extract?num=1&no=???&minute=1&area=all&pool=quality&secret=???"
-    ip = requests.get(api).text
-    return ip
+    """
+    获取代理IP地址，确保每个问卷使用新的IP
+    """
+    try:
+        # https://dps.kdlapi.com/api/getdps/?secret_id=osm4dnzrxkig3ynnhx5t&signature=hxl6r46zjtv62y0j1qzya13qt8k8ralp&num=1&format=text&sep=1
+        # 这里放你的ip链接，选择你想要的地区，1分钟，ip池无所谓，数据格式txt，提取数量1，数量一定是1!其余默认即可
+        # api = "http://www.zdopen.com/ShortProxy/GetIP/?api=202512191601503767&akey=f487701178ceb620&count=1&timespan=0&type=1"
+        # api = "https://dps.kdlapi.com/api/getdps/?secret_id=osm4dnzrxkig3ynnhx5t&signature=hxl6r46zjtv62y0j1qzya13qt8k8ralp&num=1&format=text&sep=1"
+        api = "http://www.zdopen.com/FreeProxy/Get/?app_id=202601231529549004&akey=6d21c08f3111d14b&count=1&protocol_type=1&return_type=3"
+        response = requests.get(api, timeout=10)
+        response.raise_for_status()
+        ip = response.text.strip()
+        
+        if validate(ip):
+            print(f"[IP] 成功获取新IP: {ip}")
+            return ip
+        else:
+            print(f"[IP] 获取的IP格式无效: {ip}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"[IP] 获取IP失败: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"[IP] 获取IP时发生异常: {str(e)}")
+        return None
+
+
+def get_new_ip_with_retry(max_retries=3, thread_id=0):
+    """
+    带重试机制的IP获取函数，增加调用间隔避免频率限制
+    在多线程环境中，每个线程应该错开获取IP的时间
+    """
+    # 线程延迟，避免同时请求
+    thread_delay = thread_id * 2  # 每个线程错开2秒
+    if thread_delay > 0:
+        print(f"[IP] 线程{thread_id}等待{thread_delay}秒后开始获取IP...")
+        time.sleep(thread_delay)
+    
+    for i in range(max_retries):
+        print(f"[IP][线程{thread_id}] 第{i+1}次尝试获取IP...")
+        ip = zanip()
+        if ip and validate(ip):
+            return ip
+        # 失败后等待更长时间，避免频率限制
+        wait_time = 10 if i == 0 else 15  # 第一次失败等10秒，后续等15秒
+        print(f"[IP][线程{thread_id}] 等待{wait_time}秒后重试...")
+        time.sleep(wait_time)
+    
+    print(f"[IP][线程{thread_id}] 多次尝试后仍无法获取有效IP")
+    return None
 
 
 # 示例问卷,试运行结束后,需要改成你的问卷地址
@@ -97,17 +144,17 @@ texts_prob = {
 # 单选题参数 (第2题 + 第4-15题 + 第18题 + 第22题 + 第27题，共16个单选题)
 single_prob = {
     "0": [3.8, 6.2],  # 第2题性别：女生62%，男生38%（符合55-64% vs 37-45%要求，近几年女生超60%）
-    "1": [1, 6, 7, 6],  # 第4题高考成绩：A:5%, B:30%, C:35%, D:30%
-    "2": [2, 8, 33, 8],  # 第5题高校类型：A:4%, B:16%, C:65%, D:15%
-    "3": [35, 25, 15, 12, 8, 6, 5, 4, 3, 2, 1, 1, 1],  # 第6题专业大类：13个选项，按收入排序工学＞经济学＞理学＞管理学＞农学＞文学＞艺术学＞法学＞医学＞历史学＞教育学+其他2个
+    "1": [5, 30, 35, 30],  # 第4题高考成绩：A:5%, B:30%, C:35%, D:30%
+    "2": [4, 16, 65, 15],  # 第5题高校类型：A:4%, B:16%, C:65%, D:15%
+    "3": [4, 5, 15, 12, 1, 6, 25, 35, 3, 2, 8, 1, 1],  # 第6题专业大类：13个选项，按收入排序工学＞经济学＞理学＞管理学＞农学＞文学＞艺术学＞法学＞医学＞历史学＞教育学+其他2个
     "4": [1, 1, 1, 1],  # 第7题年级：随机分布（大一、大二、大三、大四均匀分布）
-    "5": [55, 35, 7, 2, 1],  # 第8题兄弟姐妹数量：1个55%，2个35%，3个7%，4个2%，5个及以上1%（3个及以上共10%，符合<10%要求）
-    "6": [1, 1, 1, 1],  # 第9题家庭常住地：4个选项随机分布
-    "8": -1,      # 第10题 (第8个单选题)
-    "9": -1,      # 第11题 (第9个单选题)
+    "5": [7, 2, 35, 25, 31],  # 第8题兄弟姐妹数量：1个55%，2个35%，3个7%，4个2%，5个及以上1%（3个及以上共10%，符合<10%要求）
+    "6": [85, 10, 4, 1],  # 第9题家庭常住地：第一个85%，第二个10%，第三个4%，第四个1%
+    "8": [5, 5, 5, 10, 20, 30, 10, 5, 10],      # 第10题 (第8个单选题)
+    "9": [5, 5, 5, 10, 20, 30, 10, 5, 10],      # 第11题 (第9个单选题)
     "10": -1,     # 第12题 (第10个单选题)
     "11": -1,     # 第13题 (第11个单选题)
-    "12": -1,     # 第14题 (第12个单选题)
+    "12": [7, 18, 15, 15, 10, 10, 10, 10, 5],  # 第14题：1:7%, 2:18%, 3:15%, 4:15%, 5:10%, 6:10%, 7:10%, 8:10%, 9:5%
     "13": -1,     # 第15题 (第13个单选题)
     "14": -1,     # 第18题 (第14个单选题)
     "15": -1,     # 第22题 (第15个单选题)
@@ -299,6 +346,40 @@ def single(driver: WebDriver, current, index):
     ).click()
 
 
+# 单选题处理函数（带返回值，返回选中的选项文本）
+def single_with_capture(driver: WebDriver, current, index):
+    """
+    处理单选题并返回选中的选项文本
+    Args:
+        driver: WebDriver实例
+        current: 当前题号
+        index: 概率参数索引
+    Returns:
+        选中的选项文本
+    """
+    xpath = f'//*[@id="div{current}"]/div[2]/div'
+    options = driver.find_elements(By.XPATH, xpath)
+    p = single_prob[index]
+    
+    if p == -1:
+        selected_index = random.randint(0, len(options) - 1)
+    else:
+        assert len(p) == len(options), f"第{current}题参数长度：{len(p)},选项长度{len(options)},不一致！"
+        selected_index = numpy.random.choice(a=numpy.arange(0, len(options)), p=p)
+    
+    # 获取选中的选项文本
+    selected_option = options[selected_index]
+    option_text = selected_option.text.strip()
+    
+    # 点击选中的选项
+    driver.find_element(
+        By.CSS_SELECTOR, f"#div{current} > div.ui-controlgroup > div:nth-child({selected_index + 1})"
+    ).click()
+    
+    print(f"[调试] 第{current}题选中选项：{option_text}")
+    return option_text
+
+
 # 下拉框处理函数
 def droplist(driver: WebDriver, current, index):
     # 先点击“请选择”
@@ -337,13 +418,17 @@ def multiple(driver: WebDriver, current, index):
 
 
 # 第16题特殊矩阵处理函数（同级结构）
-def matrix_q16(driver: WebDriver):
+def matrix_q16(driver: WebDriver, major_type=None):
     """
-    处理第16题的特殊矩阵结构
+    处理第16题的特殊矩阵结构（根据专业类型设置学费）
     结构：#q16_1 label 和 #q16_2 label 同级
     每个label下有span.textCont，对应的input框q16_1和q16_2
+    
+    Args:
+        driver: WebDriver实例
+        major_type: 专业类型（从第6题获取），用于确定学费范围
     """
-    print(f"[调试] 处理第16题特殊矩阵结构...")
+    print(f"[调试] 处理第16题特殊矩阵结构（基于专业类型：{major_type}）...")
     
     try:
         # 获取所有子问题（q16_1, q16_2等）
@@ -372,19 +457,50 @@ def matrix_q16(driver: WebDriver):
             print("❌ 未找到第16题的子问题")
             return False
         
-        # 为每个子问题设置值
+        # 根据专业类型确定学费范围
+        def get_tuition_range(major_type):
+            """根据专业类型返回学费范围"""
+            if major_type is None:
+                # 默认范围（文史类）
+                return (4000, 6000)
+            
+            major_type = str(major_type).strip()
+            
+            # 文史类：4000-6000元/年
+            if any(keyword in major_type for keyword in ["文史", "文学", "历史", "哲学", "法学", "教育", "经济", "管理"]):
+                return (4000, 6000)
+            # 理工类：5000-8000元/年  
+            elif any(keyword in major_type for keyword in ["理工", "工学", "理学", "工程", "计算机", "数学", "物理", "化学", "生物"]):
+                return (5000, 8000)
+            # 艺术类：8000-15000元/年
+            elif any(keyword in major_type for keyword in ["艺术", "美术", "音乐", "舞蹈", "戏剧", "设计", "传媒"]):
+                return (8000, 15000)
+            # 医学类（特殊处理，通常较高）
+            elif any(keyword in major_type for keyword in ["医学", "临床", "护理", "药学"]):
+                return (6000, 10000)
+            else:
+                # 默认文史类范围
+                return (4000, 6000)
+        
+        # 获取学费范围
+        min_fee, max_fee = get_tuition_range(major_type)
+        print(f"[调试] 专业类型'{major_type}'对应的学费范围：{min_fee}-{max_fee}元/年")
+        
+        # 为每个子问题设置学费值
         for i, sub_q in enumerate(sub_questions):
-            # 生成随机文本（可以根据需要修改）
-            random_text = f"选项{i+1}_{random.randint(1, 100)}"
-            random_value = str(random.randint(1, 5))  # 假设是1-5的值
+            # 生成随机学费（整数，整百数）
+            tuition_fee = random.randint(min_fee // 100, max_fee // 100) * 100
             
-            # 设置span.textCont的值
-            driver.execute_script("arguments[0].textContent = arguments[1];", sub_q['span_elem'], random_text)
-            print(f"[调试] 设置span.textCont: {random_text}")
+            # 生成显示文本
+            display_text = f"学费：{tuition_fee}元/年"
             
-            # 设置input框的值
-            driver.execute_script("arguments[0].value = arguments[1];", sub_q['input_elem'], random_value)
-            print(f"[调试] 设置input值: {random_value}")
+            # 设置span.textCont的值（显示给用户看）
+            driver.execute_script("arguments[0].textContent = arguments[1];", sub_q['span_elem'], display_text)
+            print(f"[调试] 设置span.textCont: {display_text}")
+            
+            # 设置input框的值（实际提交的值）
+            driver.execute_script("arguments[0].value = arguments[1];", sub_q['input_elem'], str(tuition_fee))
+            print(f"[调试] 设置input值: {tuition_fee}")
             
             # 触发input框的事件
             driver.execute_script("""
@@ -478,6 +594,11 @@ def matrix(driver: WebDriver, current, matrix_question_index):
         else:
             return matrix_question_index + 1  # 即使失败也继续
     
+    # 特殊处理第20题（交替行结构）
+    if current == 20:
+        print(f"[调试] 第20题使用特殊交替行矩阵处理")
+        return matrix_q20_alternating(driver, current, matrix_question_index)
+    
     xpath1 = f'//*[@id="divRefTab{current}"]/tbody/tr'
     a = driver.find_elements(By.XPATH, xpath1)
     q_num = 0  # 矩阵的题数量
@@ -532,6 +653,95 @@ def matrix(driver: WebDriver, current, matrix_question_index):
             raise
     
     return matrix_question_index + 1  # 返回下一个矩阵题的索引
+
+
+# 第20题特殊交替行矩阵处理函数
+def matrix_q20_alternating(driver: WebDriver, current, matrix_question_index):
+    """
+    处理第20题的特殊交替行矩阵结构
+    结构：
+    - 第1行：表头（非常便宜，毫无压力 比较便宜，轻松负担 适中，能负担 比较贵，有一定压力 非常贵，家庭负担沉重）
+    - 第2,4,6,8,10,12行：空行（spacer）
+    - 第3,5,7,9,11,13行：实际子问题（上涨20%, 上涨50%, 上涨100%, 上涨200%, 上涨300%, 上涨400%）
+    
+    Args:
+        driver: WebDriver实例
+        current: 当前题号（20）
+        matrix_question_index: 矩阵题的序号
+    """
+    print(f"[调试] 开始处理第20题交替行矩阵结构...")
+    
+    try:
+        # 获取所有行
+        all_rows = driver.find_elements(By.CSS_SELECTOR, f"#divRefTab{current} tbody tr")
+        print(f"[调试] 找到{len(all_rows)}行")
+        
+        # 获取概率参数
+        if matrix_question_index < len(matrix_prob):
+            p = matrix_prob[matrix_question_index]
+        else:
+            p = -1  # 默认随机
+        
+        print(f"[调试] 使用概率参数: {p}")
+        
+        # 处理交替行：只处理奇数行（第3,5,7,9,11,13行，索引为2,4,6,8,10,12）
+        sub_question_index = 1
+        
+        for row_index in range(2, len(all_rows), 2):  # 从第3行开始，步长为2
+            if row_index >= len(all_rows):
+                break
+                
+            row = all_rows[row_index]
+            
+            # 获取这一行的所有td
+            tds = row.find_elements(By.CSS_SELECTOR, "td")
+            print(f"[调试] 第{row_index + 1}行有{len(tds)}个td")
+            
+            if len(tds) >= 6:  # 确保有足够的列
+                # 第一列是标签文本
+                label_text = tds[0].text.strip()
+                print(f"[调试] 子问题{sub_question_index}: '{label_text}'")
+                
+                # 选择选项（第2-6列是实际的选项）
+                if p == -1:
+                    selected_col = random.randint(2, 6)  # 从第2到第6列
+                else:
+                    # 使用概率选择
+                    if isinstance(p, list) and len(p) == 5:  # 确保概率数组长度正确
+                        selected_col = numpy.random.choice(a=numpy.arange(2, 7), p=p)
+                    else:
+                        selected_col = random.randint(2, 6)
+                
+                print(f"[调试] 选择第{selected_col}列")
+                
+                # 点击对应的td
+                try:
+                    # 找到包含radio button的td
+                    target_td = tds[selected_col - 1]  # 数组索引从0开始
+                    radio_input = target_td.find_element(By.CSS_SELECTOR, "input[type='radio']")
+                    
+                    # 使用JavaScript点击，确保能点击到
+                    driver.execute_script("arguments[0].click();", radio_input)
+                    print(f"✅ 子问题{sub_question_index}选择完成")
+                    
+                except Exception as e:
+                    print(f"⚠️ 子问题{sub_question_index}点击失败: {str(e)}")
+                    # 尝试直接点击td
+                    try:
+                        driver.execute_script("arguments[0].click();", target_td)
+                        print(f"✅ 子问题{sub_question_index}通过td点击完成")
+                    except Exception as e2:
+                        print(f"❌ 子问题{sub_question_index}处理失败: {str(e2)}")
+                
+                time.sleep(0.2)
+                sub_question_index += 1
+        
+        print(f"✅ 第20题交替行矩阵处理完成，共处理{sub_question_index - 1}个子问题")
+        return matrix_question_index + 1
+        
+    except Exception as e:
+        print(f"❌ 第20题交替行矩阵处理失败: {str(e)}")
+        return matrix_question_index + 1  # 即使失败也继续
 
 
 # 排序题处理函数，排序暂时只能随机
@@ -601,6 +811,7 @@ def brush(driver: WebDriver):
     matrix_num = 0  # 第num个矩阵小题
     scale_num = 0  # 第num个量表题
     current = 0  # 题号
+    selected_major = None  # 存储第6题选择的专业类型，用于第16题的条件处理
     
     for page_idx, j in enumerate(q_list, 1):  # 遍历每一页
         print(f"\n[调试] 处理第{page_idx}页，共{j}道题")
@@ -629,17 +840,34 @@ def brush(driver: WebDriver):
                     vacant_num += 1
                     print(f"✅ 第{current}题省份填写完成")
                     
-                elif 4 <= current <= 15:  # 第4-15题：单选题
+                elif 4 <= current <= 5:  # 第4-5题：单选题
                     print(f"[调试] 第{current}题：单选题")
                     single(driver, current, single_num)
                     single_num += 1
                     print(f"✅ 第{current}题选择完成")
                     
-                elif current == 16:  # 第16题：特殊矩阵题
-                    print(f"[调试] 第{current}题：特殊矩阵题（同级结构）")
-                    if not matrix_q16(driver):
-                        raise Exception(f"第{current}题特殊矩阵处理失败")
-                    print(f"✅ 第{current}题特殊矩阵处理完成")
+                elif current == 6:  # 第6题：单选题（专业大类）- 特殊处理，需要记录选择结果
+                    print(f"[调试] 第{current}题：单选题（专业大类）")
+                    selected_major = single_with_capture(driver, current, single_num)
+                    single_num += 1
+                    print(f"✅ 第6题选择完成，选中专业：{selected_major}")
+                    
+                elif 7 <= current <= 15:  # 第7-15题：单选题
+                    print(f"[调试] 第{current}题：单选题")
+                    single(driver, current, single_num)
+                    single_num += 1
+                    print(f"✅ 第{current}题选择完成")
+                    
+                elif current == 16:  # 第16题：特殊矩阵题（根据第6题专业类型设置学费）
+                    print(f"[调试] 第{current}题：特殊矩阵题（根据专业类型设置学费）")
+                    if selected_major is None:
+                        print("⚠️ 未获取到第6题专业信息，使用默认处理")
+                        if not matrix_q16(driver, None):
+                            raise Exception(f"第{current}题特殊矩阵处理失败")
+                    else:
+                        if not matrix_q16(driver, selected_major):
+                            raise Exception(f"第{current}题特殊矩阵处理失败")
+                    print(f"✅ 第{current}题特殊矩阵处理完成（基于专业：{selected_major}）")
                     
                 elif current == 17:  # 第17题：滑块题（有5个子滑块）
                     print(f"[调试] 第{current}题：滑块题（5个子滑块）")
@@ -760,7 +988,14 @@ def submit(driver: WebDriver):
         pass
 
 
-def run(xx, yy):
+def run(xx, yy, thread_id=0):
+    """
+    运行问卷填写的主函数
+    
+    Args:
+        xx, yy: 浏览器窗口位置坐标
+        thread_id: 线程ID，用于IP获取的错开处理
+    """
     option = webdriver.ChromeOptions()
     option.add_experimental_option("excludeSwitches", ["enable-automation"])
     option.add_experimental_option("useAutomationExtension", False)
@@ -768,10 +1003,28 @@ def run(xx, yy):
     driver = None  # 初始化driver变量
     
     while cur_num < target_num:
-        if driver is None:  # 只有在需要新浏览器时才创建
+        if driver is None:  # 只有在需要新浏览器时才创建˜
+            # 每次创建新浏览器时都获取新的IP地址，确保每个问卷使用独立IP
             if use_ip:
-                ip = zanip()
-                option.add_argument(f"--proxy-server={ip}")
+                ip = get_new_ip_with_retry(thread_id=thread_id)
+                if ip:
+                    print(f"[IP][线程{thread_id}] 获取新IP地址: {ip}")
+                    # 创建新的ChromeOptions实例，避免IP累积
+                    option = webdriver.ChromeOptions()
+                    option.add_experimental_option("excludeSwitches", ["enable-automation"])
+                    option.add_experimental_option("useAutomationExtension", False)
+                    option.add_argument(f"--proxy-server={ip}")
+                else:
+                    print(f"[IP][线程{thread_id}] 无法获取新IP，使用本机IP继续执行")
+                    # 创建不带代理的ChromeOptions
+                    option = webdriver.ChromeOptions()
+                    option.add_experimental_option("excludeSwitches", ["enable-automation"])
+                    option.add_experimental_option("useAutomationExtension", False)
+            else:
+                # 创建不带代理的ChromeOptions
+                option = webdriver.ChromeOptions()
+                option.add_experimental_option("excludeSwitches", ["enable-automation"])
+                option.add_experimental_option("useAutomationExtension", False)
             driver = webdriver.Chrome(options=option)
             driver.set_window_size(1200, 800)  # 增大窗口便于调试
             driver.set_window_position(x=xx, y=yy)
@@ -807,15 +1060,45 @@ def run(xx, yy):
                 print(
                     f"✅ 成功填写第{cur_num}份 - 失败{cur_fail}次 - {time.strftime('%H:%M:%S', time.localtime(time.time()))} "
                 )
-                print("[调试] 问卷填写成功！浏览器将保持打开状态30秒供您查看...")
-                time.sleep(30)  # 保持浏览器打开30秒
-                driver.quit()
+                print("[调试] 问卷填写成功！正在关闭当前浏览器...")
+                # 成功填写后也关闭浏览器，准备下一次
+                try:
+                    driver.quit()
+                    print("✅ 成功关闭浏览器")
+                except Exception as quit_error:
+                    print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
                 driver = None  # 重置driver变量
+                
+                # 等待1秒让系统释放资源
+                time.sleep(1)
+                print("🔄 准备进行下一次问卷填写...")
             else:
-                print("[调试] URL未变化，可能填写失败。浏览器保持打开状态供您检查...")
-                print("[提示] 您可以手动检查页面，按Ctrl+C停止脚本")
-                while True:  # 保持浏览器打开，直到用户手动停止
-                    time.sleep(1)
+                print("[调试] URL未变化，可能填写失败。正在关闭当前浏览器并重新尝试...")
+                # URL未变化也视为失败，关闭浏览器重新尝试
+                try:
+                    driver.quit()
+                    print("✅ 成功关闭浏览器")
+                except Exception as quit_error:
+                    print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
+                driver = None
+                
+                # 增加失败计数
+                lock.acquire()
+                cur_fail += 1
+                lock.release()
+                
+                print(f"⚠️ URL未变化，视为失败。已失败{cur_fail}次")
+                
+                # 等待2秒让系统释放资源
+                time.sleep(2)
+                
+                if cur_fail >= fail_threshold:
+                    logging.critical(f"失败次数过多({cur_fail}次)，程序将停止。")
+                    print("\n❌ 达到失败阈值，程序停止")
+                    break
+                else:
+                    print(f"\n🔄 准备进行第{cur_fail + 1}次尝试...")
+                    continue
                     
         except KeyboardInterrupt:
             print("\n[用户中断] 用户手动停止脚本")
@@ -845,36 +1128,29 @@ def run(xx, yy):
                 f"\n⚠️ 已失败{cur_fail}次, 失败超过{int(fail_threshold)}次将强制停止",
             )
             
+            # 无论是否达到失败阈值，都关闭当前浏览器并重新打开
+            print(f"\n� 关闭当前浏览器窗口，准备重新打开新的浏览器...")
+            if driver:
+                try:
+                    driver.quit()
+                    print("✅ 成功关闭当前浏览器")
+                except Exception as quit_error:
+                    print(f"⚠️ 关闭浏览器时出错: {str(quit_error)}")
+                driver = None
+            
+            # 等待2秒让系统释放资源
+            time.sleep(2)
+            
             if cur_fail >= fail_threshold:
                 logging.critical(
-                    "失败次数过多，程序将停止。浏览器保持打开状态供您调试..."
+                    f"失败次数过多({cur_fail}次)，程序将停止。"
                 )
-                print("\n🔍 [调试模式] 浏览器保持打开状态，您可以：")
-                print("   1. 检查页面元素和结构")
-                print("   2. 使用开发者工具(F12)查看HTML")
-                print("   3. 手动尝试填写问卷")
-                print("   4. 按Ctrl+C停止脚本")
-                
-                # 保持浏览器打开，直到用户手动停止
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    print("\n用户选择停止脚本")
+                print("\n❌ 达到失败阈值，程序停止")
                 break
             else:
-                print(f"\n🔍 [调试模式] 浏览器保持打开状态，供您检查第{cur_fail}次失败原因...")
-                print("[提示] 您可以检查页面后按Ctrl+C继续下一个尝试")
-                try:
-                    input("按回车键继续下一个尝试，或按Ctrl+C停止脚本...")
-                except KeyboardInterrupt:
-                    print("\n用户选择停止脚本")
-                    break
-                
-                # 关闭当前浏览器，创建新的浏览器实例
-                if driver:
-                    driver.quit()
-                    driver = None
+                print(f"\n🔄 准备进行第{cur_fail + 1}次尝试...")
+                print("[提示] 将在2秒后自动重新打开浏览器")
+                time.sleep(2)
                 continue
 
 
@@ -889,18 +1165,27 @@ if __name__ == "__main__":
     lock = threading.Lock()
     use_ip = False
     stop = False
-    if validate(zanip()):
-        print("IP设置成功, 将使用代理ip填写")
+    
+    # 测试IP获取功能（单线程测试，避免频率限制）
+    print("[IP] 正在测试IP获取功能...")
+    test_ip = get_new_ip_with_retry(thread_id=0)
+    if test_ip:
+        print(f"[IP] IP设置成功, 将使用代理IP填写问卷 - 每个问卷使用独立IP")
         use_ip = True
     else:
-        print("IP设置失败, 将使用本机ip填写")
-    num_threads = 1  # 窗口数量
+        print("[IP] IP设置失败, 将使用本机IP填写问卷")
+    
+    # 等待10秒，让IP服务商的频率限制重置
+    print("[IP] 等待10秒让IP服务商频率限制重置...")
+    time.sleep(10)
+    
+    num_threads = 4  # 窗口数量
     threads: list[Thread] = []
     # 创建并启动线程
     for i in range(num_threads):
         x = 50 + i * 60  # 浏览器弹窗左上角的横坐标
         y = 50  # 纵坐标
-        thread = Thread(target=run, args=(x, y))
+        thread = Thread(target=run, args=(x, y, i))  # 传入线程ID
         threads.append(thread)
         thread.start()
 

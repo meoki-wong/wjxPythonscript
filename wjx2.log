@@ -1,0 +1,28 @@
+==================================================
+[IP] IP功能已禁用，使用本机IP填写问卷
+[测试] 开始单线程测试...
+[错误] 运行过程中发生错误: Message: invalid session id: session deleted as the browser has closed the connection
+from disconnected: not connected to DevTools
+  (Session info: chrome=143.0.7499.193); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#invalidsessionidexception
+Stacktrace:
+0   chromedriver                        0x0000000101d3f068 chromedriver + 6631528
+1   chromedriver                        0x0000000101d35d1a chromedriver + 6593818
+2   chromedriver                        0x0000000101756ccb chromedriver + 437451
+3   chromedriver                        0x000000010173d3fd chromedriver + 332797
+4   chromedriver                        0x0000000101765901 chromedriver + 497921
+5   chromedriver                        0x00000001017d6b1b chromedriver + 961307
+6   chromedriver                        0x00000001017f5d48 chromedriver + 1088840
+7   chromedriver                        0x000000010179afb7 chromedriver + 716727
+8   chromedriver                        0x000000010179bc81 chromedriver + 720001
+9   chromedriver                        0x0000000101cfc011 chromedriver + 6357009
+10  chromedriver                        0x0000000101d00460 chromedriver + 6374496
+11  chromedriver                        0x0000000101cd7023 chromedriver + 6205475
+12  chromedriver                        0x0000000101d00ed5 chromedriver + 6377173
+13  chromedriver                        0x0000000101cc5f01 chromedriver + 6135553
+14  chromedriver                        0x0000000101d22a98 chromedriver + 6515352
+15  chromedriver                        0x0000000101d22c53 chromedriver + 6515795
+16  chromedriver                        0x0000000101d3591c chromedriver + 6592796
+17  libsystem_pthread.dylib             0x00007ff81c92f4e1 _pthread_start + 125
+18  libsystem_pthread.dylib             0x00007ff81c92af6b thread_start + 15
+
+[测试] 测试完成

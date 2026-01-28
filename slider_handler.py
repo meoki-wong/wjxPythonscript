@@ -88,26 +88,47 @@ def handle_slider_question(driver, question_num, sub_count):
             print(f"⚠️  警告：预期{sub_count}个滑块，实际找到{len(slider_inputs)}个")
         
         # 为每个滑块设置值
-        # 特殊处理第17题：5个值加起来必须是100
+        # 特殊处理第17题：5个值加起来必须是100，第一个值不低于55
         if question_num == 17 and sub_count == 5:
-            print(f"   第17题特殊处理：生成5个和为100的随机值")
-            # 生成5个正整数，和为100
-            values = []
-            remaining = 100
-            for i in range(4):  # 前4个值
+            print(f"   第17题特殊处理：生成5个和为100的随机值，第一个值不低于55")
+            # 第一个值：55-70之间
+            first_value = random.randint(55, 70)
+            remaining = 100 - first_value
+            
+            # 生成剩余4个值
+            values = [first_value]
+            for i in range(3):  # 中间3个值
                 # 确保剩下的值足够分配给剩余的输入框（每个至少1）
-                max_val = remaining - (4 - i)
+                max_val = remaining - (3 - i)
                 val = random.randint(1, max_val)
                 values.append(val)
                 remaining -= val
             values.append(remaining)  # 最后一个值
             
-            # 打乱顺序，让分布更随机
-            random.shuffle(values)
-            print(f"   生成的值: {values}")
+            # 注意：不打乱顺序，确保第一个值是55-70之间的值
+            print(f"   生成的值: {values} (第一个值: {first_value})")
         else:
             # 其他题目正常随机生成
-            values = [random.randint(1, 100) for _ in range(sub_count)]
+            if question_num == 19 and sub_count == 2:
+                # 第19题特殊处理：第二个值有80%概率大于第一个值
+                print(f"   第19题特殊处理：第二个值有80%概率大于第一个值")
+                # 生成第一个值
+                first_value = random.randint(1, 80)  # 第一个值在1-80之间
+                # 生成第二个值
+                if random.random() < 0.8:  # 80%概率
+                    # 第二个值大于第一个值
+                    second_value = random.randint(first_value + 1, 100)
+                    print(f"   第二个值大于第一个值: {second_value} > {first_value}")
+                else:  # 20%概率
+                    # 第二个值可以小于或等于第一个值
+                    second_value = random.randint(1, first_value)
+                    print(f"   第二个值不大于第一个值: {second_value} <= {first_value}")
+                
+                values = [first_value, second_value]
+                print(f"   生成的值: {values}")
+            else:
+                # 其他题目正常随机生成
+                values = [random.randint(1, 100) for _ in range(sub_count)]
             
         # 为每个滑块设置值
         for i, input_elem in enumerate(slider_inputs[:sub_count]):

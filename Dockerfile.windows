@@ -1,0 +1,33 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# 安装必要的工具
+RUN apt-get update && apt-get install -y \
+    wine \
+    wine64 \
+    wine32 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装Python依赖
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# 安装PyInstaller
+RUN pip3 install pyinstaller
+
+# 复制项目文件
+COPY . .
+
+# 设置WINE环境
+ENV WINEPREFIX=/root/.wine
+ENV WINEARCH=win64
+
+# 构建Windows可执行文件
+RUN pyinstaller wjx2.spec --onefile --windowed
+
+# 输出目录
+VOLUME ["/app/dist"]
+
+CMD ["bash"]
